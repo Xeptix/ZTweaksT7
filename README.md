@@ -34,12 +34,21 @@ their own character preference. A missing preference reply is treated as RANDOM.
 3. Open **ZTWEAKS SETTINGS** from the Zombies lobby or pause menu.
 
 ZTweaks is a mod, not a loose `custom_scripts` or `ui_scripts` installation. Players
-install through Workshop; there is no separate script edition to copy into a client.
+can also download **ZTweaks T7 v1.0 by Xep.zip** from
+[GitHub Releases](https://github.com/Xeptix/ZTweaksT7/releases/latest).
+Extract it and copy its `mods` folder into the Black Ops III game directory, giving
+`Call of Duty Black Ops III/mods/ztweaks/zone/`. Select **ZTweaks** under **Mods**.
+This ZIP contains the compiled mod and all twelve language fastfiles; it needs no
+installer or Mod Tools. Close the game before replacing these files for an update.
+The adjacent `SHA256SUMS` verifies the ZIP; the one inside verifies its contents.
+The separate **Workshop** ZIP is source/linker input, not a player installation.
+There is no separate script edition to copy into a client.
 
 Black Ops III enables one selected mod at a time. For several Z mods together, select
 [ZBundle](https://steamcommunity.com/sharedfiles/filedetails/?id=3802815997) instead of
 the standalone item. Settings saved under one Workshop mod are separate from those
 saved under another, including the standalone mod and ZBundle.
+The manually installed local copy also has its own profile storage.
 
 ## Usage
 
