@@ -1,0 +1,17 @@
+>mode,zm
+>type,common
+
+#include "zm_mod.class"
+
+// ZTweaks uses the early-loaded stock _scoreboard.gsc lifecycle as its
+// standalone startup carrier and preserves the stock scoreboard setup. ZPause
+// and ZShare retain their separate _clientids and _zm_player carriers.
+rawfile,dummy.cfg
+scriptparsetree,scripts/ztweaks/main.gsc
+scriptparsetree,scripts/zm/gametypes/_scoreboard.gsc
+
+// Preserve the stock Zombies HUD require list and append a gameplay-lifecycle
+// listener for the stock force_scoreboard game-over notification.
+rawfile,ui/uieditor/menus/hud/hud_zm_require.lua
+rawfile,ui/ztweaks/ztweaksautorestarthud.lua
+rawfile,ui/ztweaks/ztweakscompat.lua

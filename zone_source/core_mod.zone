@@ -1,0 +1,15 @@
+>mode,core
+>type,common
+
+#include "core_mod.class"
+
+// One byte-identical Z-mod menu background. ZBundle deduplicates this line
+// and carries a single shared zmods.gdt/image asset.
+image,zmods_menu_background_image
+
+// Frontend loader plus generated settings data and the menu/persistence module.
+rawfile,ui/t7/utility/codutilityrequire.lua
+rawfile,ui/ztweaks/ztweakssettings.lua
+rawfile,ui/ztweaks/ztweakssettingsdata.lua
+rawfile,ui/ztweaks/ztweaksingamesettings.lua
+rawfile,ui/ztweaks/ztweaksrestartfallback.lua
