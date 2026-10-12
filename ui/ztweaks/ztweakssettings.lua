@@ -1,7 +1,18 @@
 -- ZTweaks lobby settings for Black Ops III.
 -- Rows come from src/settings.json through tools/generate_settings.py.
 
+-- A selected ZBundle fastfile and an Omni loose route can both ask Lua to
+-- load this owner under different module names.  Treat the already-installed
+-- runtime as authoritative so the second route cannot reset tables, hooks, or
+-- menu state underneath the first one.
+if CoD.ZTweaksSettings ~= nil and CoD.ZTweaksSettings.RuntimeLoaded == true then
+	return
+end
+
 require( "ui.ztweaks.ztweakssettingsdata" )
+require( "ui.ztweaks.ztweakslocalization" )
+local L = CoD.ZTweaksLocalization
+L.Notices.Install( "t7" )
 require( "ui.uieditor.widgets.Scrollbars.verticalScrollbar" )
 
 local Z = CoD.ZTweaksSettings
@@ -57,6 +68,21 @@ B.Components = B.Components or {}
 B.ComponentById = B.ComponentById or {}
 B.Actions = B.Actions or {}
 B.ActionById = B.ActionById or {}
+B.Localizers = B.Localizers or {}
+Z.OwnerWords = function ( english, row, tab )
+	if english == nil then return "" end
+	english = tostring( english )
+	local owner = type( row ) == "table" and ( row.sourceOwner or row.localizationOwner ) or nil
+	owner = owner or ( type( tab ) == "table" and tab.owner or nil )
+	local provider = owner ~= nil and B.Localizers[owner] or nil
+	if type( provider ) == "table" then provider = provider.text end
+	if type( provider ) == "function" then
+		local ok, result = pcall( provider, english, { row = row, tab = tab, owner = owner } )
+		if ok and type( result ) == "string" and result ~= english then return result end
+	end
+	if owner == "ztweaks" or ( L.ShellKeys or {} )[english] == true then return L.Text( english ) end
+	return english
+end
 -- The two published spellings have opposite tuple order. Repair a missing
 -- alias by capability, even when another registry already advertises v5.
 if B.RowOverride == nil and type( B.RowForced ) == "function" then
@@ -105,7 +131,9 @@ if ( tonumber( B.RowWritableVersion ) or 0 ) < 3 then
 				reason = ok and result or nil
 			end
 			if reason ~= nil and reason ~= false then return tostring( reason ) end
-			return value == nil and "Override unavailable" or "Locked to " .. string.upper( value )
+			-- Keep shared registry output owner-neutral. The renderer composes and
+			-- translates the fallback with the row owner's value at the draw site.
+			return nil
 		end
 		if not B.RowEnabled( row, tab, controller ) then return row.disabledReason or row.hint or "" end
 		return row.hint or ""
@@ -121,6 +149,16 @@ if ( tonumber( B.RowWritableVersion ) or 0 ) < 3 then
 		return not B.RowUnavailable( row, tab, controller ) and #( row.values or {} ) > 0
 	end
 	B.RowWritableVersion = 3
+end
+
+Z.RowReasonWords = function ( row, tab, controller )
+	local value, locked = B.RowOverride( row, tab, controller )
+	local reason = B.RowReason( row, tab, controller )
+	if locked and ( reason == nil or reason == "" ) then
+		if value == nil then return L.Text( "Override unavailable" ) end
+		return L.Format( "Locked to {value}", { value = Z.OwnerWords( Z.ValueLabel( row, value ), row, tab ) } )
+	end
+	return Z.OwnerWords( reason or "", row, tab )
 end
 -- Authority is an edit privilege, not a gameplay scope or forced value.
 if ( tonumber( B.RowWritableVersion ) or 0 ) < 5 then
@@ -334,6 +372,11 @@ B.ActionLabel = B.ActionLabel or function ( action, controller )
 	end
 	return tostring( label or ( action ~= nil and action.id ) or "" )
 end
+Z.ActionWords = function ( action, controller )
+	local english = B.ActionLabel( action, controller )
+	if type( action ) ~= "table" then return english end
+	return Z.OwnerWords( english, action, { owner = action.owner } )
+end
 B.ActionEnabled = B.ActionEnabled or function ( action, controller )
 	if action == nil or type( action.enabled ) ~= "function" then return true end
 	local ok, value = pcall( action.enabled, controller, action )
@@ -507,7 +550,7 @@ B.RegisterTab( {
 			local state, reason = Z.ReportRead( name )
 			table.insert( rows, {
 				dvar = "zt_ui_status_" .. name, key = "report_" .. name,
-				label = string.upper( string.gsub( name, "_", " " ) ), hint = Z.ReportHint( state, reason ),
+				label = L.ReportLabels[name] or string.upper( string.gsub( name, "_", " " ) ), hint = Z.ReportHint( state, reason ),
 				default = state, boundary = "READ ONLY", scope = "HOST / SHARED", kind = "choice",
 				values = { state }, labels = { string.upper( string.gsub( state, "_", " " ) ) },
 				ztReadOnly = true, readOnly = true, writable = false, editable = false,
@@ -536,8 +579,15 @@ B.RegisterTab( {
 						for index, value in ipairs( row.values or {} ) do
 							if Z.Same( current, value ) then currentLabel = row.labels[index] or currentLabel; break end
 						end
-						copy.label = string.upper( tostring( tab.ownerLabel or tab.owner or "MOD" ) ) .. " - " .. tostring( row.label )
-						copy.hint = tostring( row.hint or "" ) .. "  Current value from " .. tostring( tab.ownerLabel or tab.owner or "this mod" ) .. "."
+						local sourceOwner = row.sourceOwner or row.localizationOwner or tab.owner
+						copy.label = L.Format( "{owner} - {setting}", { owner = string.upper( tostring( tab.ownerLabel or tab.owner or "MOD" ) ), setting = Z.OwnerWords( row.label, row, tab ) } )
+						copy.hint = L.Format( "{hint}  Current value from {owner}.", { hint = Z.OwnerWords( row.hint, row, tab ), owner = tostring( tab.ownerLabel or tab.owner or "MOD" ) } )
+						copy.sourceOwner = sourceOwner
+						copy.localizationOwner = sourceOwner
+						copy.labelKey, copy.hintKey, copy.choiceKeys = nil, nil, nil
+						copy.boundaryKey, copy.scopeKey = nil, nil
+						copy.key, copy.keys, copy.storageSlot = nil, nil, nil
+						copy.storageFactor, copy.storageRadix, copy.storageLegacyIndex = nil, nil, nil
 						copy.boundary = "READ ONLY"
 						copy.default = current
 						copy.values = { current }
@@ -587,6 +637,36 @@ end
 
 Z.IsDefault = function ( current, row )
 	return current == "" or Z.Same( current, row.default )
+end
+
+-- Menu-local cursor intent keeps a just-picked value selected even when the
+-- owner normalizes that value to the row's semantic default.  It is cleared
+-- on open/reset, so a fresh screen still truthfully starts on DEFAULT.
+Z.Picked = Z.Picked or {}
+
+Z.PickedKey = function ( row, tab )
+	return tostring( tab ~= nil and tab.owner or "" ) .. "|" .. tostring( row.dvar or row.key or "" )
+end
+
+Z.SetPicked = function ( row, tab, value, observed )
+	if row == nil then return end
+	Z.Picked[Z.PickedKey( row, tab )] = { value = value, observed = observed }
+end
+
+Z.ClearPicked = function ()
+	Z.Picked = {}
+end
+
+Z.ShowsDefault = function ( current, row, tab )
+	local key = Z.PickedKey( row, tab )
+	local picked = Z.Picked[key]
+	if picked ~= nil and not ( Z.Same( current, picked.observed ) or Z.Same( current, picked.value ) ) then
+		Z.Picked[key] = nil
+		picked = nil
+	end
+	if not Z.IsDefault( current, row ) then return false end
+	if picked == nil then return true end
+	return picked.value == nil or picked.value == ""
 end
 
 Z.SemanticDefault = function ( row )
@@ -1509,12 +1589,17 @@ Z.RowGet = function ( row, tab, controller )
 	return Z.Get( row.dvar )
 end
 
+-- Shared-menu conformance: action rows are inert values in every distribution.
+Z.NativeButtonRowSeam = 1
+
 Z.Chosen = function ( self, element, controller, param, menu )
 	local row = param.row or param
 	local tab = param.tab
 	if not B.RowWritable( row, tab, controller ) then return end
 	UpdateInfoModels( element )
+	local picked = element.default == true and "" or element.value
 	local current = Z.RowGet( row, tab, controller )
+	Z.SetPicked( row, tab, picked, current )
 	if element.default == true then
 		if Z.IsDefault( current, row ) then return end
 	elseif Z.Same( current, element.value ) then
@@ -1522,6 +1607,7 @@ Z.Chosen = function ( self, element, controller, param, menu )
 	end
 	if tab ~= nil and type( tab.set ) == "function" then
 		tab.set( controller, row.dvar, element.value, row )
+		Z.SetPicked( row, tab, picked, Z.RowGet( row, tab, controller ) )
 		-- The CHANGED category's enabled model is part of the tab datasource.
 		-- Refresh after every real write so the final category becomes reachable
 		-- immediately instead of retaining the disabled state captured at open.
@@ -1529,6 +1615,7 @@ Z.Chosen = function ( self, element, controller, param, menu )
 		return
 	end
 	Z.TabSet( controller, row.dvar, element.value, row )
+	Z.SetPicked( row, tab, picked, Z.RowGet( row, tab, controller ) )
 	if type( Z.QueueRegistryRefresh ) == "function" then Z.QueueRegistryRefresh( menu, controller, tab ~= nil and tab.id or nil ) end
 end
 
@@ -1541,11 +1628,11 @@ Z.Row = function ( row, source, tab, controller )
 		DataSources[source] = DataSourceHelpers.ListSetup( source, function ( who )
 			who = who or controller
 			return { {
-			models = { text = B.RowHostLocked( row, tab, who ) and "HOST CONTROLLED" or ( Z.ButtonAvailable( row, tab, who ) and "ACTIVATE" or "UNAVAILABLE" ), ztOptionLocked = true },
-			properties = { title = row.dvar or "", desc = row.hint or "", selectIndex = true,
+			models = { text = Z.OwnerWords( B.RowHostLocked( row, tab, who ) and "HOST CONTROLLED" or ( Z.ButtonAvailable( row, tab, who ) and "ACTIVATE" or "UNAVAILABLE" ), row, tab ), ztOptionLocked = true },
+			properties = { title = row.dvar or "", desc = Z.OwnerWords( row.hint or "", row, tab ), selectIndex = true,
 				loopEdges = false, showChangeIndicator = function () return false end }
 		} } end, nil, nil, nil )
-		return { models = { name = row.label or "ACTION", desc = B.RowReason( row, tab, controller ) or row.hint or "",
+		return { models = { name = Z.OwnerWords( row.label or "ACTION", row, tab ), desc = Z.RowReasonWords( row, tab, controller ),
 			ztButtonRow = true, ztRowState = available and "NORMAL" or "DISABLED",
 			ztDefaultCaption = "TYPE", ztBoundaryCaption = "STATUS", defaultText = "BUTTON",
 			boundaryText = hostLocked and "HOST CONTROLLED" or ( available and "READY" or "DISABLED" ),
@@ -1576,15 +1663,18 @@ Z.Row = function ( row, source, tab, controller )
 			local readLabel = B.RowHostValue( row, tab, controller )
 			if readLabel == nil then
 				readLabel = locked and forced == nil and "UNAVAILABLE" or Z.ValueLabel( row, current )
-				if locked then readLabel = "LOCKED: " .. readLabel
-				elseif not B.RowEnabled( row, tab, controller ) then readLabel = "DISABLED: " .. readLabel end
+				readLabel = Z.OwnerWords( readLabel, row, tab )
+				if locked then readLabel = L.Format( "LOCKED: {value}", { value = readLabel } )
+				elseif not B.RowEnabled( row, tab, controller ) then readLabel = L.Format( "DISABLED: {value}", { value = readLabel } ) end
+			else
+				readLabel = Z.OwnerWords( readLabel, row, tab )
 			end
 			return { {
 				models = { text = readLabel, ztOptionLocked = true },
-				properties = { title = row.dvar, desc = "[" .. ( locked and "OVERRIDDEN" or ( B.RowEnabled( row, tab, controller ) and "READ ONLY" or "DISABLED" ) ) .. "] " .. B.RowReason( row, tab, controller ), value = current, selectIndex = true, loopEdges = false, action = function () end }
+				properties = { title = row.dvar, desc = L.Format( "[{boundary}] {hint}", { boundary = Z.OwnerWords( locked and "OVERRIDDEN" or ( B.RowEnabled( row, tab, controller ) and "READ ONLY" or "DISABLED" ), row, tab ), hint = Z.RowReasonWords( row, tab, controller ) } ), value = current, selectIndex = true, loopEdges = false, action = function () end }
 			} }
 		end
-		local atDefault = Z.IsDefault( current, row )
+		local atDefault = Z.ShowsDefault( current, row, tab )
 		local listed = atDefault
 		for _, value in ipairs( row.values ) do
 			if Z.Same( current, value ) then listed = true end
@@ -1592,10 +1682,10 @@ Z.Row = function ( row, source, tab, controller )
 		local options = {}
 		local add = function ( label, value, isDefault, selected )
 			table.insert( options, {
-				models = { text = label },
+				models = { text = Z.OwnerWords( label, row, tab ) },
 				properties = {
 					title = row.dvar,
-					desc = "[" .. row.boundary .. "] " .. row.hint,
+					desc = L.Format( "[{boundary}] {hint}", { boundary = Z.OwnerWords( row.boundary, row, tab ), hint = Z.OwnerWords( row.hint, row, tab ) } ),
 					value = value,
 					default = isDefault,
 					actionParam = { row = row, tab = tab },
@@ -1636,16 +1726,16 @@ Z.Row = function ( row, source, tab, controller )
 	DataSources[source] = DataSourceHelpers.ListSetup( source, buildOptions, nil, nil, nil )
 	return {
 		models = {
-			name = row.label or row.dvar,
-			desc = state == "NORMAL" and B.RowReason( row, tab, controller ) or ( state .. ": " .. B.RowReason( row, tab, controller ) ),
+			name = Z.OwnerWords( row.label or row.dvar, row, tab ),
+			desc = state == "NORMAL" and Z.RowReasonWords( row, tab, controller ) or L.Format( "{state}: {reason}", { state = Z.OwnerWords( state, row, tab ), reason = Z.RowReasonWords( row, tab, controller ) } ),
 			disabled = false,
 			ztUnavailable = unavailable,
 			ztRowState = state,
 			ztDefaultCaption = hostLocked and "HOST VALUE" or ( state == "OVERRIDDEN" and "FORCED" or ( state == "DISABLED" and "CURRENT" or "DEFAULT" ) ),
 			ztBoundaryCaption = state == "NORMAL" and "APPLIES" or "STATUS",
-			defaultText = hostLocked and "UNAVAILABLE" or ( state == "NORMAL" and defaultLabel or currentLabel ),
-			boundaryText = state == "NORMAL" and row.boundary or state,
-			scopeText = row.scope or "HOST / SHARED",
+			defaultText = Z.OwnerWords( hostLocked and "UNAVAILABLE" or ( state == "NORMAL" and defaultLabel or currentLabel ), row, tab ),
+			boundaryText = Z.OwnerWords( state == "NORMAL" and row.boundary or state, row, tab ),
+			scopeText = Z.OwnerWords( row.scope or "HOST / SHARED", row, tab ),
 			optionsDatasource = source
 		},
 		properties = {}
@@ -1738,13 +1828,13 @@ Z.UpdateTabNavigation = function ( menu, id, controller )
 	if menu.TabLeft ~= nil then menu.TabLeft:setAlpha( hasPrevious and 1 or 0.22 ) end
 	if menu.TabRight ~= nil then menu.TabRight:setAlpha( hasNext and 1 or 0.22 ) end
 	if menu.TabPrevious ~= nil then
-		menu.TabPrevious:setText( hasPrevious and "<  PREV: " .. tostring( menu.ztTabs[previousIndex].label or menu.ztTabs[previousIndex].id ) or "" )
+		menu.TabPrevious:setText( hasPrevious and L.Format( "<  PREV: {tab}", { tab = Z.OwnerWords( menu.ztTabs[previousIndex].label or menu.ztTabs[previousIndex].id, nil, menu.ztTabs[previousIndex] ) } ) or "" )
 	end
 	if menu.TabNext ~= nil then
-		menu.TabNext:setText( hasNext and "NEXT: " .. tostring( menu.ztTabs[nextIndex].label or menu.ztTabs[nextIndex].id ) .. "  >" or "" )
+		menu.TabNext:setText( hasNext and L.Format( "NEXT: {tab}  >", { tab = Z.OwnerWords( menu.ztTabs[nextIndex].label or menu.ztTabs[nextIndex].id, nil, menu.ztTabs[nextIndex] ) } ) or "" )
 	end
 	if menu.TabPosition ~= nil then
-		menu.TabPosition:setText( "CATEGORY " .. tostring( index ) .. " / " .. tostring( count ) )
+		menu.TabPosition:setText( L.Text( L.Format( "CATEGORY {current} / {total}", { current = index, total = count } ) ) )
 	end
 end
 
@@ -1754,9 +1844,9 @@ Z.BuildTabsDataSource = function ( name, tabs, selectedId, controller )
 		for _, tab in ipairs( tabs ) do
 			table.insert( result, {
 				models = {
-					tabName = tab.label or tab.id,
+					tabName = Z.OwnerWords( tab.label or tab.id, nil, tab ),
 					tabId = tab.id,
-					tabHint = tab.hint or "",
+					tabHint = Z.OwnerWords( tab.hint or "", nil, tab ),
 					tabOwner = tab.owner or "",
 					disabled = not Z.TabEnabled( tab, controller )
 				},
@@ -1808,8 +1898,8 @@ Z.ActivateTab = function ( menu, controller, id, force )
 	menu.ztChangedOnly = false
 	menu.ztRows = Z.TabRows( tab )
 	menu.ztAvailability = Z.AvailabilitySnapshot( menu, controller )
-	if menu.Title ~= nil then menu.Title:setText( menu.ztCharacterOnly and "CHARACTER PREFERENCES" or Z.MenuTitle( menu.ztTabs, tab ) ) end
-	menu.Subtitle:setText( tab.hint or "" )
+	if menu.Title ~= nil then menu.Title:setText( L.Text( menu.ztCharacterOnly and "CHARACTER PREFERENCES" or Z.MenuTitle( menu.ztTabs, tab ) ) ) end
+	menu.Subtitle:setText( Z.OwnerWords( tab.hint or "", nil, tab ) )
 	menu.ztDataSource = menu.ztDataSources[id]
 	Z.BuildDataSource( menu.ztDataSource, menu.ztRows, tab )
 	menu.Options.savedActiveIndex = menu.ztTabPositions[id] or 0
@@ -1856,7 +1946,7 @@ end
 Z.RefreshRegistry = function ( menu, controller, preferredId )
 	if menu == nil or menu.Options == nil then return end
 	local snapshot = Z.CaptureView( menu )
-	if menu.ComponentVersions ~= nil then menu.ComponentVersions:setText( B.ComponentVersionsText( controller ) ) end
+	if menu.ComponentVersions ~= nil then menu.ComponentVersions:setText( L.Text( B.ComponentVersionsText( controller ) ) ) end
 	local tabs = menu.ztCharacterOnly and { B.TabById.ztweaks_characters } or B.GetTabs( controller )
 	local active = Z.FindTab( tabs, preferredId )
 	if active ~= nil and not Z.TabEnabled( active, controller ) then active = nil end
@@ -1904,82 +1994,118 @@ Z.QueueRegistryRefresh = function ( menu, controller, preferredId )
 end
 
 Z.NavigateTabDirection = function ( menu, controller, direction )
-	if menu == nil or menu.Tabs == nil or menu.Tabs.grid == nil then return end
-	-- A held key's repeated down events must not race the timer, but a fresh
-	-- Q/E press is never delayed by the previous press in either direction.
-	if menu.ztTabHoldSource ~= nil then
-		if menu.ztAllowFirstStep then menu.ztAllowFirstStep = nil
-		elseif not menu.ztTimerStepping then return end
-	end
+	if menu == nil or menu.Tabs == nil or menu.Tabs.grid == nil then return false end
 	local target = Z.AdjacentTabIndex( menu.ztTabs, menu.ztActiveTabId, direction, controller )
-	if target == nil then return end
+	if target == nil then return false end
 	local targetId = menu.ztTabs[target].id
 	-- Rebuild under a fresh datasource identity and select the destination.
 	-- Besides making both edges circular, this refreshes the dynamic CHANGED
 	-- disabled state before GridLayout can skip its formerly-disabled model and
 	-- guarantees that an off-screen selected category is scrolled into view.
 	Z.RefreshRegistry( menu, controller, targetId )
+	return true
 end
 
 Z.StopTabHold = function ( menu )
+	if menu == nil then return end
 	menu.ztTabHoldSource = nil
 	menu.ztTabHoldDirection = nil
-	menu.ztRawKeyHoldSource = nil
-	menu.ztAllowFirstStep = nil
-	menu.ztTimerStepping = nil
-	if menu.ztTabHoldDelay ~= nil then menu.ztTabHoldDelay:close(); menu.ztTabHoldDelay = nil end
-	if menu.ztTabHoldRepeat ~= nil then menu.ztTabHoldRepeat:close(); menu.ztTabHoldRepeat = nil end
+	menu.ztTabHoldEpoch = ( menu.ztTabHoldEpoch or 0 ) + 1
+	if menu.ztTabHoldTimer ~= nil then
+		pcall( menu.ztTabHoldTimer.close, menu.ztTabHoldTimer )
+		menu.ztTabHoldTimer = nil
+	end
+end
+
+Z.TabHoldBlocked = function ( menu )
+	return menu == nil or menu.occludedBy ~= nil
+end
+
+Z.TabHoldSchedule = function ( menu, epoch, delay, controller, direction )
+	local ok, timer = pcall( LUI.UITimer.newElementTimer, delay, true, function ()
+		menu.ztTabHoldTimer = nil
+		if menu.ztTabHoldEpoch ~= epoch or menu.ztTabHoldSource == nil then return end
+		if Z.TabHoldBlocked( menu ) or not Z.NavigateTabDirection( menu, controller, direction ) then
+			Z.StopTabHold( menu )
+			return
+		end
+		if menu.ztTabHoldEpoch == epoch then Z.TabHoldSchedule( menu, epoch, 225, controller, direction ) end
+	end )
+	if ok and timer ~= nil then
+		menu.ztTabHoldTimer = timer
+		menu:addElement( timer )
+	else
+		Z.StopTabHold( menu )
+	end
+end
+
+Z.StartTabHold = function ( menu, controller, direction, source )
+	if menu == nil or Z.TabHoldBlocked( menu ) then return end
+	if menu.ztTabHoldSource == source and menu.ztTabHoldDirection == direction then return end
+	Z.StopTabHold( menu )
+	menu.ztTabHoldSource = source
+	menu.ztTabHoldDirection = direction
+	local epoch = menu.ztTabHoldEpoch
+	if not Z.NavigateTabDirection( menu, controller, direction ) or menu.ztTabHoldEpoch ~= epoch
+		or Z.TabHoldBlocked( menu ) then
+		Z.StopTabHold( menu )
+		return
+	end
+	Z.TabHoldSchedule( menu, epoch, 350, controller, direction )
+end
+
+-- Merge raw and model edges. A raw release is authoritative; a zero written
+-- by stock as a model acknowledgement is not a physical release while raw is
+-- still down.
+Z.TabHoldEdge = function ( menu, controller, source, direction, route, down )
+	if menu == nil or type( down ) ~= "boolean" then return end
+	menu.ztTabEdges = menu.ztTabEdges or {}
+	local state = menu.ztTabEdges[source]
+	if state == nil then state = {}; menu.ztTabEdges[source] = state end
+	if state[route] == down then return end
+	state[route] = down
+	if route == "raw" then state.rawSeen = down end
+	if not down and ( route == "raw" or not state.rawSeen ) then
+		state.pressed = false
+		if menu.ztTabHoldSource == source then Z.StopTabHold( menu ) end
+	elseif down and not state.pressed then
+		state.pressed = true
+		Z.StartTabHold( menu, controller, direction, source )
+	end
+end
+
+Z.TabHoldSources = { Q = -1, E = 1, LB = -1, RB = 1 }
+
+Z.TabHoldModel = function ( menu, controller, source, model )
+	local usable = Engine.IsControllerBeingUsed( controller ) or menu.unusedControllerAllowed
+	local down = false
+	if usable then
+		local ok, got = pcall( function ()
+			return CoD.BitUtility.IsBitwiseAndNonZero( Engine.GetModelValue( model ), Enum.LUIButtonFlags.FLAG_DOWN )
+		end )
+		down = ok and got == true
+	end
+	Z.TabHoldEdge( menu, controller, source, Z.TabHoldSources[source], "model", down )
 end
 
 Z.InstallHeldShortcutBitGuard = function ()
 	if CoD.Menu == nil or type( CoD.Menu.HandleButtonPress ) ~= "function"
 		or Z.HeldShortcutHandler == CoD.Menu.HandleButtonPress then return end
 	local inherited = CoD.Menu.HandleButtonPress
-	local wrapped = function ( menu, controller, button, model )
-		local keys = menu ~= nil and menu.ztHeldShortcutModels or nil
-		if keys == nil or ( model ~= keys.Q and model ~= keys.E )
-			or not ( Engine.IsControllerBeingUsed( controller ) or menu.unusedControllerAllowed ) then
-			return inherited( menu, controller, button, model )
-		end
-		-- Stock consumes each press by clearing KeyPressBits to zero. Preserve
-		-- this menu's Q/E bits until key-up so a hold is not mistaken for a tap.
-		local callbacks = menu:GetElementAndFunctionTableForButton( button, "buttonFunctions" )
-		for _, callback in ipairs( callbacks ) do
-			if callback.fn( callback.element, menu, controller, model ) then break end
-		end
+	local wrapped = function ( menu, controller, button, model, ... )
+		local models = menu ~= nil and menu.ztHeldShortcutModels or nil
+		local source = models ~= nil and models[model] or nil
+		if source == nil then return inherited( menu, controller, button, model, ... ) end
+		Z.TabHoldModel( menu, controller, source, model )
 	end
 	Z.HeldShortcutHandler = wrapped
 	CoD.Menu.HandleButtonPress = wrapped
-end
-
-Z.StartTabHold = function ( menu, controller, direction, source )
-	if menu.ztTabHoldSource == source and menu.ztTabHoldDirection == direction then return end
-	Z.StopTabHold( menu )
-	if Z.AdjacentTabIndex( menu.ztTabs, menu.ztActiveTabId, direction, controller ) == nil then return end
-	menu.ztTabHoldSource = source
-	menu.ztTabHoldDirection = direction
-	menu.ztAllowFirstStep = true
-	local repeatStep = function ()
-		if menu.ztTabHoldSource ~= source or menu.occludedBy ~= nil then Z.StopTabHold( menu ); return end
-		menu.ztTimerStepping = true
-		Z.NavigateTabDirection( menu, controller, direction )
-		menu.ztTimerStepping = nil
-	end
-	menu.ztTabHoldDelay = LUI.UITimer.newElementTimer( 350, true, function ()
-		menu.ztTabHoldDelay = nil
-		if menu.ztTabHoldSource ~= source then return end
-		repeatStep()
-		menu.ztTabHoldRepeat = LUI.UITimer.newElementTimer( 225, false, repeatStep )
-		menu:addElement( menu.ztTabHoldRepeat )
-	end )
-	menu:addElement( menu.ztTabHoldDelay )
 end
 
 Z.AttachMouseTabHold = function ( menu, button, controller, direction )
 	local source = direction < 0 and "mouse_left" or "mouse_right"
 	button:registerEventHandler( "leftmousedown", function ( element, event )
 		element.ztMouseTabPress = true
-		Z.NavigateTabDirection( menu, event.controller or controller, direction )
 		Z.StartTabHold( menu, event.controller or controller, direction, source )
 		return true
 	end )
@@ -1989,6 +2115,40 @@ Z.AttachMouseTabHold = function ( menu, button, controller, direction )
 	end )
 	button:registerEventHandler( "mouseleave", function ()
 		if menu.ztTabHoldSource == source then Z.StopTabHold( menu ) end
+	end )
+end
+
+Z.AttachTabHoldInputs = function ( menu, controller )
+	if menu == nil then return end
+	if menu.Tabs ~= nil then menu.Tabs.m_disableNavigation = true end
+	menu.ztHeldShortcutModels = {}
+	local root = Engine.GetModelForController( controller )
+	for source, path in pairs( {
+		Q = "KeyPressBits.Q", E = "KeyPressBits.E",
+		LB = "ButtonBits." .. Enum.LUIButton.LUI_KEY_LB,
+		RB = "ButtonBits." .. Enum.LUIButton.LUI_KEY_RB
+	} ) do
+		local ok, model = pcall( Engine.GetModel, root, path )
+		if ok and model ~= nil then
+			menu.ztHeldShortcutModels[model] = source
+			menu:subscribeToModel( model, function ( changed ) Z.TabHoldModel( menu, controller, source, changed ) end, false )
+		end
+	end
+	local previous = menu.m_eventHandlers ~= nil and menu.m_eventHandlers.gamepad_button or nil
+	menu:registerEventHandler( "gamepad_button", function ( element, event )
+		local source = nil
+		local button = event.button
+		if button == "shoulderl" or button == "left_shoulder" or button == Enum.LUIButton.LUI_KEY_LB then source = "LB"
+		elseif button == "shoulderr" or button == "right_shoulder" or button == Enum.LUIButton.LUI_KEY_RB then source = "RB"
+		elseif button == "key_shortcut" and type( event.key ) == "string" then
+			local key = string.upper( event.key )
+			if key == "Q" or key == "E" then source = key end
+		end
+		if source ~= nil then
+			Z.TabHoldEdge( element, event.controller or controller, source, Z.TabHoldSources[source], "raw", event.down )
+			return true
+		end
+		if previous ~= nil then return previous( element, event ) end
 	end )
 end
 
@@ -2009,6 +2169,7 @@ Z.ResetRow = function ( controller, tab, row )
 end
 
 Z.ResetAll = function ( controller, menu )
+	Z.ClearPicked()
 	local preferredId = menu ~= nil and menu.ztActiveTabId or nil
 	local flushedOwners = {}
 	local resetOwners = {}
@@ -2056,10 +2217,12 @@ Z.ResetAll = function ( controller, menu )
 end
 
 Z.ResetActiveOwner = function ( controller, menu )
+	Z.ClearPicked()
 	Z.ResetAll( controller, menu )
 end
 
 Z.ResetActiveTab = function ( controller, menu )
+	Z.ClearPicked()
 	local tab = menu ~= nil and menu.ztActiveTab or nil
 	if tab == nil or tab.role ~= nil then return end
 	local usedSetter = false
@@ -2104,8 +2267,8 @@ end
 Z.AskRandomizeTab = function ( controller, settingsMenu )
 	local overlayName = "ZTweaksSettingsRandomizeTab"
 	CoD.OverlayUtility.AddSystemOverlay( overlayName, {
-		menuName = "SystemOverlay_Compact", title = "RANDOMIZE THIS TAB",
-		description = "Choose random values for every setting on this tab? GAME DEFAULT may be selected.",
+		menuName = "SystemOverlay_Compact", title = L.Text( "RANDOMIZE THIS TAB" ),
+		description = L.Text( "Choose random values for every setting on this tab? GAME DEFAULT may be selected." ),
 		categoryType = CoD.OverlayUtility.OverlayTypes.Alert,
 		listDatasource = function ()
 			DataSources.ZTweaksSettingsRandomizeTab_List = DataSourceHelpers.ListSetup( "ZTweaksSettingsRandomizeTab_List", function () return {
@@ -2147,15 +2310,15 @@ Z.ToggleChangedFilter = function ( controller, menu )
 	Z.BuildDataSource( menu.ztDataSource, rows, tab )
 	menu.Options.savedActiveIndex = 0
 	menu.Options:setDataSource( menu.ztDataSource )
-	menu.Subtitle:setText( ( tab.hint or "" ) .. ( menu.ztChangedOnly and "  FILTER: CHANGED" or "" ) )
+	menu.Subtitle:setText( menu.ztChangedOnly and L.Format( "{hint}  FILTER: CHANGED", { hint = Z.OwnerWords( tab.hint, nil, tab ) } ) or Z.OwnerWords( tab.hint, nil, tab ) )
 	Z.SyncScrollbar( menu )
 end
 
 Z.AskResetTab = function ( controller, settingsMenu )
 	local overlayName = "ZTweaksSettingsResetTab"
 	CoD.OverlayUtility.AddSystemOverlay( overlayName, {
-		menuName = "SystemOverlay_Compact", title = "RESET THIS TAB",
-		description = "Put every setting on this tab back to its default?",
+		menuName = "SystemOverlay_Compact", title = L.Text( "RESET THIS TAB" ),
+		description = L.Text( "Put every setting on this tab back to its default?" ),
 		categoryType = CoD.OverlayUtility.OverlayTypes.Alert,
 		listDatasource = function ()
 			DataSources.ZTweaksSettingsResetTab_List = DataSourceHelpers.ListSetup( "ZTweaksSettingsResetTab_List", function () return {
@@ -2178,8 +2341,8 @@ Z.AskReset = function ( controller, settingsMenu )
 	local overlayName = "ZTweaksSettingsReset"
 	CoD.OverlayUtility.AddSystemOverlay( overlayName, {
 		menuName = "SystemOverlay_Compact",
-		title = "RESET TO DEFAULTS",
-		description = B.IsBundle() and "Put every registered mod setting back to its default?" or "Put every ZTweaks setting back to its default?",
+		title = L.Text( "RESET TO DEFAULTS" ),
+		description = L.Text( B.IsBundle() and "Put every registered mod setting back to its default?" or "Put every ZTweaks setting back to its default?" ),
 		categoryType = CoD.OverlayUtility.OverlayTypes.Alert,
 		listDatasource = function ()
 			DataSources.ZTweaksSettingsReset_List = DataSourceHelpers.ListSetup( "ZTweaksSettingsReset_List", function ()
@@ -2237,18 +2400,19 @@ Z.BundleVersion = function ()
 end
 
 Z.EntryLabel = function ()
-	return B.IsBundle() and "ZBUNDLE SETTINGS" or "ZTWEAKS SETTINGS"
+	return L.Text( B.IsBundle() and "ZBUNDLE SETTINGS" or "ZTWEAKS SETTINGS" )
 end
 
 Z.MenuTitle = function ( tabs, tab )
-	if not B.IsBundle() then return "ZTWEAKS SETTINGS" end
+	if not B.IsBundle() then return L.Text( "ZTWEAKS SETTINGS" ) end
 	local suffix = tab ~= nil and ( tab.owner == "zbundle" and tab.label or tab.ownerLabel or tab.owner ) or nil
-	return suffix ~= nil and "ZBUNDLE SETTINGS - " .. string.upper( tostring( suffix ) ) or "ZBUNDLE SETTINGS"
+	return suffix ~= nil and L.Format( "ZBUNDLE SETTINGS - {owner}", { owner = L.Text( string.upper( tostring( suffix ) ) ) } ) or L.Text( "ZBUNDLE SETTINGS" )
 end
 
 -- Lobby and pause use this same page so labels, scrolling, persistence and
 -- footer actions cannot drift apart as the settings catalog grows.
 Z.CreateMenu = function ( controller, menuName, characterOnly )
+	Z.ClearPicked()
 	require( "ui.uieditor.widgets.StartMenu.StartMenu_Options_Slider_Small" )
 	require( "ui.uieditor.widgets.StartMenu.StartMenu_Options_Slider_Control_Item_Small" )
 	require( "ui.uieditor.widgets.Lobby.Common.List1ButtonLarge_PH" )
@@ -2341,7 +2505,7 @@ Z.CreateMenu = function ( controller, menuName, characterOnly )
 			widget.Title:linkToElementModel( widget, "name", true, function ( model )
 				local value = Engine.GetModelValue( model )
 				local localizedName = value ~= nil and Engine.Localize( value ) or ""
-				local halfHeight = #localizedName > 27 and 8.5 or 11
+				local halfHeight = L.Length( localizedName ) > 27 and 8.5 or 11
 				widget.Title:setTopBottom( false, false, -halfHeight, halfHeight )
 			end )
 			-- Keep focus and hover, but style disabled/forced rows after every
@@ -2435,7 +2599,7 @@ Z.CreateMenu = function ( controller, menuName, characterOnly )
 	local title = LUI.UIText.new()
 	title:setLeftRight( true, false, 90, 720 )
 	title:setTopBottom( true, false, 48, 98 )
-	title:setText( characterOnly and "CHARACTER PREFERENCES" or Z.MenuTitle( tabs, activeTab ) )
+	title:setText( L.Text( characterOnly and "CHARACTER PREFERENCES" or Z.MenuTitle( tabs, activeTab ) ) )
 	title:setTTF( "fonts/RefrigeratorDeluxe-Regular.ttf" )
 	title:setAlignment( Enum.LUIAlignment.LUI_ALIGNMENT_LEFT )
 	title:setAlignment( Enum.LUIAlignment.LUI_ALIGNMENT_MIDDLE )
@@ -2445,7 +2609,7 @@ Z.CreateMenu = function ( controller, menuName, characterOnly )
 	local ComponentVersions = LUI.UIText.new()
 	ComponentVersions:setLeftRight( true, false, 90, 1190 )
 	ComponentVersions:setTopBottom( true, false, 25, 42 )
-	ComponentVersions:setText( B.ComponentVersionsText( controller ) )
+	ComponentVersions:setText( L.Text( B.ComponentVersionsText( controller ) ) )
 	ComponentVersions:setRGB( 0.72, 0.72, 0.72 )
 	ComponentVersions:setTTF( "fonts/RefrigeratorDeluxe-Regular.ttf" )
 	ComponentVersions:setAlignment( Enum.LUIAlignment.LUI_ALIGNMENT_LEFT )
@@ -2455,7 +2619,7 @@ Z.CreateMenu = function ( controller, menuName, characterOnly )
 	local HostStatus = LUI.UIText.new()
 	HostStatus:setLeftRight( true, false, 950, 1190 )
 	HostStatus:setTopBottom( true, false, 48, 72 )
-	HostStatus:setText( B.HostStatus( controller ) )
+	HostStatus:setText( L.Text( B.HostStatus( controller ) ) )
 	HostStatus:setRGB( 1, 0.55, 0.18 )
 	HostStatus:setTTF( "fonts/RefrigeratorDeluxe-Regular.ttf" )
 	HostStatus:setAlignment( Enum.LUIAlignment.LUI_ALIGNMENT_RIGHT )
@@ -2464,9 +2628,9 @@ Z.CreateMenu = function ( controller, menuName, characterOnly )
 	self.ztHostState = B.HostStatus( controller )
 
 	local Subtitle = LUI.UIText.new()
-	Subtitle:setLeftRight( true, false, 92, 720 )
+	Subtitle:setLeftRight( true, false, 92, 1190 )
 	Subtitle:setTopBottom( true, false, 97, 121 )
-	Subtitle:setText( activeTab.hint or "" )
+	Subtitle:setText( Z.OwnerWords( activeTab.hint or "", nil, activeTab ) )
 	Subtitle:setRGB( 1, 0.55, 0.18 )
 	Subtitle:setTTF( "fonts/RefrigeratorDeluxe-Regular.ttf" )
 	Subtitle:setAlignment( Enum.LUIAlignment.LUI_ALIGNMENT_LEFT )
@@ -2592,7 +2756,7 @@ Z.CreateMenu = function ( controller, menuName, characterOnly )
 	local DescriptionLabel = LUI.UIText.new()
 	DescriptionLabel:setLeftRight( true, false, 670, 1160 )
 	DescriptionLabel:setTopBottom( true, false, 277, 297 )
-	DescriptionLabel:setText( "DESCRIPTION" )
+	DescriptionLabel:setText( L.Text( "DESCRIPTION" ) )
 	DescriptionLabel:setRGB( 1, 0.55, 0.18 )
 	DescriptionLabel:setTTF( "fonts/RefrigeratorDeluxe-Regular.ttf" )
 	DescriptionLabel:setAlignment( Enum.LUIAlignment.LUI_ALIGNMENT_LEFT )
@@ -2613,7 +2777,7 @@ Z.CreateMenu = function ( controller, menuName, characterOnly )
 	local DefaultLabel = LUI.UIText.new()
 	DefaultLabel:setLeftRight( true, false, 670, 800 )
 	DefaultLabel:setTopBottom( true, false, 447, 469 )
-	DefaultLabel:setText( "DEFAULT" )
+	DefaultLabel:setText( L.Text( "DEFAULT" ) )
 	DefaultLabel:setRGB( 1, 0.55, 0.18 )
 	DefaultLabel:setTTF( "fonts/RefrigeratorDeluxe-Regular.ttf" )
 	DefaultLabel:setAlignment( Enum.LUIAlignment.LUI_ALIGNMENT_LEFT )
@@ -2631,7 +2795,7 @@ Z.CreateMenu = function ( controller, menuName, characterOnly )
 	local AppliesLabel = LUI.UIText.new()
 	AppliesLabel:setLeftRight( true, false, 670, 800 )
 	AppliesLabel:setTopBottom( true, false, 485, 507 )
-	AppliesLabel:setText( "APPLIES" )
+	AppliesLabel:setText( L.Text( "APPLIES" ) )
 	AppliesLabel:setRGB( 1, 0.55, 0.18 )
 	AppliesLabel:setTTF( "fonts/RefrigeratorDeluxe-Regular.ttf" )
 	AppliesLabel:setAlignment( Enum.LUIAlignment.LUI_ALIGNMENT_LEFT )
@@ -2649,7 +2813,7 @@ Z.CreateMenu = function ( controller, menuName, characterOnly )
 	local ScopeLabel = LUI.UIText.new()
 	ScopeLabel:setLeftRight( true, false, 670, 800 )
 	ScopeLabel:setTopBottom( true, false, 519, 541 )
-	ScopeLabel:setText( "SCOPE" )
+	ScopeLabel:setText( L.Text( "SCOPE" ) )
 	ScopeLabel:setRGB( 1, 0.55, 0.18 )
 	ScopeLabel:setTTF( "fonts/RefrigeratorDeluxe-Regular.ttf" )
 	ScopeLabel:setAlignment( Enum.LUIAlignment.LUI_ALIGNMENT_LEFT )
@@ -2666,29 +2830,29 @@ Z.CreateMenu = function ( controller, menuName, characterOnly )
 
 	DetailsTitle:linkToElementModel( Options, "name", true, function ( model )
 		local value = Engine.GetModelValue( model )
-		if value then DetailsTitle:setText( value ) end
+		if value then DetailsTitle:setText( L.Text( value ) ) end
 	end )
 	DetailsDescription:linkToElementModel( Options, "desc", true, function ( model )
 		local value = Engine.GetModelValue( model )
-		if value then DetailsDescription:setText( value ) end
+		if value then DetailsDescription:setText( L.Text( value ) ) end
 	end )
 	DetailsDefault:linkToElementModel( Options, "defaultText", true, function ( model )
 		local value = Engine.GetModelValue( model )
-		if value then DetailsDefault:setText( value ) end
+		if value then DetailsDefault:setText( L.Text( value ) ) end
 	end )
 	DefaultLabel:linkToElementModel( Options, "ztDefaultCaption", true, function ( model )
-		DefaultLabel:setText( Engine.GetModelValue( model ) or "DEFAULT" )
+		DefaultLabel:setText( L.Text( Engine.GetModelValue( model ) or "DEFAULT" ) )
 	end )
 	AppliesLabel:linkToElementModel( Options, "ztBoundaryCaption", true, function ( model )
-		AppliesLabel:setText( Engine.GetModelValue( model ) or "APPLIES" )
+		AppliesLabel:setText( L.Text( Engine.GetModelValue( model ) or "APPLIES" ) )
 	end )
 	DetailsBoundary:linkToElementModel( Options, "boundaryText", true, function ( model )
 		local value = Engine.GetModelValue( model )
-		if value then DetailsBoundary:setText( value ) end
+		if value then DetailsBoundary:setText( L.Text( value ) ) end
 	end )
 	DetailsScope:linkToElementModel( Options, "scopeText", true, function ( model )
 		local value = Engine.GetModelValue( model )
-		if value then DetailsScope:setText( value ) end
+		if value then DetailsScope:setText( L.Text( value ) ) end
 	end )
 	Subtitle:linkToElementModel( Tabs.grid, "tabId", true, function ( model )
 		local value = Engine.GetModelValue( model )
@@ -2698,8 +2862,8 @@ Z.CreateMenu = function ( controller, menuName, characterOnly )
 	local Back = CoD.List1ButtonLarge_PH.new( self, controller )
 	Back:setLeftRight( true, false, 90, 185 )
 	Back:setTopBottom( true, false, 654, 686 )
-	Back.btnDisplayText:setText( "BACK" )
-	Back.btnDisplayTextStroke:setText( "BACK" )
+	Back.btnDisplayText:setText( L.Text( "BACK" ) )
+	Back.btnDisplayTextStroke:setText( L.Text( "BACK" ) )
 	self:addElement( Back )
 	self.Back = Back
 	Back.id = "Back"
@@ -2707,8 +2871,8 @@ Z.CreateMenu = function ( controller, menuName, characterOnly )
 	local Reset = CoD.List1ButtonLarge_PH.new( self, controller )
 	Reset:setLeftRight( true, false, 195, 335 )
 	Reset:setTopBottom( true, false, 654, 686 )
-	Reset.btnDisplayText:setText( "RESET TAB" )
-	Reset.btnDisplayTextStroke:setText( "RESET TAB" )
+	Reset.btnDisplayText:setText( L.Text( "RESET TAB" ) )
+	Reset.btnDisplayTextStroke:setText( L.Text( "RESET TAB" ) )
 	self:addElement( Reset )
 	self.Reset = Reset
 	Reset.id = "Reset"
@@ -2716,8 +2880,8 @@ Z.CreateMenu = function ( controller, menuName, characterOnly )
 	local Randomize = CoD.List1ButtonLarge_PH.new( self, controller )
 	Randomize:setLeftRight( true, false, 345, 475 )
 	Randomize:setTopBottom( true, false, 654, 686 )
-	Randomize.btnDisplayText:setText( "RANDOMIZE" )
-	Randomize.btnDisplayTextStroke:setText( "RANDOMIZE" )
+	Randomize.btnDisplayText:setText( L.Text( "RANDOMIZE" ) )
+	Randomize.btnDisplayTextStroke:setText( L.Text( "RANDOMIZE" ) )
 	self:addElement( Randomize )
 	self.Randomize = Randomize
 	Randomize.id = "Randomize"
@@ -2725,8 +2889,8 @@ Z.CreateMenu = function ( controller, menuName, characterOnly )
 	local ResetAll = CoD.List1ButtonLarge_PH.new( self, controller )
 	ResetAll:setLeftRight( true, false, 485, 610 )
 	ResetAll:setTopBottom( true, false, 654, 686 )
-	ResetAll.btnDisplayText:setText( "RESET ALL" )
-	ResetAll.btnDisplayTextStroke:setText( "RESET ALL" )
+	ResetAll.btnDisplayText:setText( L.Text( "RESET ALL" ) )
+	ResetAll.btnDisplayTextStroke:setText( L.Text( "RESET ALL" ) )
 	self:addElement( ResetAll )
 	self.ResetAll = ResetAll
 	ResetAll.id = "ResetAll"
@@ -2744,26 +2908,6 @@ Z.CreateMenu = function ( controller, menuName, characterOnly )
 		CoD.Menu.SetButtonLabel( menu, Enum.LUIButton.LUI_KEY_XBA_PSCROSS, "MENU_SELECT" )
 		return true
 	end, false )
-	-- The stock button-bit callbacks above perform the first Q/E/LB/RB step.
-	-- Raw up/down events own the hold lifetime. Repeated down events are
-	-- ignored while the timer runs, but a fresh press moves immediately.
-	local previousGamepadButton = self.m_eventHandlers.gamepad_button
-	self:registerEventHandler( "gamepad_button", function ( element, event )
-		local direction = nil
-		local source = nil
-		if event.button == "shoulderl" or event.button == "left_shoulder" or event.button == Enum.LUIButton.LUI_KEY_LB then direction, source = -1, "left"
-		elseif event.button == "shoulderr" or event.button == "right_shoulder" or event.button == Enum.LUIButton.LUI_KEY_RB then direction, source = 1, "right"
-		elseif event.button == "key_shortcut" and string.upper( tostring( event.key or "" ) ) == "Q" then direction, source = -1, "key_left"
-		elseif event.button == "key_shortcut" and string.upper( tostring( event.key or "" ) ) == "E" then direction, source = 1, "key_right" end
-		if direction ~= nil then
-			if event.down == true then
-				Z.StartTabHold( element, event.controller or controller, direction, source )
-				if event.button == "key_shortcut" then element.ztRawKeyHoldSource = source end
-		elseif element.ztTabHoldSource == source then Z.StopTabHold( element ) end
-		end
-		return previousGamepadButton( element, event )
-	end )
-
 	local bindFooter = function ( button, action )
 		button:registerEventHandler( "gain_focus", function ( element, event )
 			local result = nil
@@ -2805,47 +2949,23 @@ Z.CreateMenu = function ( controller, menuName, characterOnly )
 		Z.AskReset( controller, self )
 		return true
 	end, function ( element, menu )
-		CoD.Menu.SetButtonLabel( menu, Enum.LUIButton.LUI_KEY_XBX_PSSQUARE, "RESET TO DEFAULTS" )
+		CoD.Menu.SetButtonLabel( menu, Enum.LUIButton.LUI_KEY_XBX_PSSQUARE, L.Text( "RESET TO DEFAULTS" ) )
 		return true
 	end, false )
 	self:AddButtonCallbackFunction( self, controller, Enum.LUIButton.LUI_KEY_XBY_PSTRIANGLE, "F", function ()
 		Z.ToggleChangedFilter( controller, self )
 		return true
 	end, function ( element, menu )
-		CoD.Menu.SetButtonLabel( menu, Enum.LUIButton.LUI_KEY_XBY_PSTRIANGLE, "FILTER CHANGED" )
+		CoD.Menu.SetButtonLabel( menu, Enum.LUIButton.LUI_KEY_XBY_PSTRIANGLE, L.Text( "FILTER CHANGED" ) )
 		return true
 	end, false )
 	self:AddButtonCallbackFunction( self, controller, Enum.LUIButton.LUI_KEY_LB, "Q", function ()
-		Z.NavigateTabDirection( self, controller, -1 )
 		return true
 	end, AlwaysFalse, false )
 	self:AddButtonCallbackFunction( self, controller, Enum.LUIButton.LUI_KEY_RB, "E", function ()
-		Z.NavigateTabDirection( self, controller, 1 )
 		return true
 	end, AlwaysFalse, false )
-	-- The stock Q/E callbacks above subscribe to KeyPressBits, not raw
-	-- gamepad_button. Observe their key-up state to own the hold lifetime.
-	for _, binding in ipairs( { { key = "Q", direction = -1, source = "key_left" },
-		{ key = "E", direction = 1, source = "key_right" } } ) do
-		local model = Engine.GetModel( Engine.GetModelForController( controller ), "KeyPressBits." .. binding.key )
-		if model ~= nil then
-			self.ztHeldShortcutModels = self.ztHeldShortcutModels or {}
-			self.ztHeldShortcutModels[binding.key] = model
-			self:subscribeToModel( model, function ( changed )
-				local down = CoD.BitUtility.IsBitwiseAndNonZero( Engine.GetModelValue( changed ), Enum.LUIButtonFlags.FLAG_DOWN )
-				if down then
-					local started = self.ztTabHoldSource ~= binding.source
-					Z.StartTabHold( self, controller, binding.direction, binding.source )
-					if started and self.ztTabHoldSource == binding.source then
-						self:addElement( LUI.UITimer.newElementTimer( 1, true, function ()
-							if self.ztTabHoldSource == binding.source then self.ztAllowFirstStep = nil end
-						end ) )
-					end
-				elseif self.ztTabHoldSource == binding.source
-					and self.ztRawKeyHoldSource ~= binding.source then Z.StopTabHold( self ) end
-			end, false )
-		end
-	end
+	Z.AttachTabHoldInputs( self, controller )
 
 	self:processEvent( { name = "menu_loaded", controller = controller } )
 	self:processEvent( { name = "update_state", menu = self } )
@@ -2895,7 +3015,7 @@ Z.CreateMenu = function ( controller, menuName, characterOnly )
 		if self.occludedBy == nil and not self.m_inputDisabled
 			and ( status ~= self.ztHostState or availability ~= self.ztAvailability ) then
 			self.ztHostState = status
-			self.HostStatus:setText( status )
+			self.HostStatus:setText( L.Text( status ) )
 			Z.RefreshRegistry( self, controller, self.ztActiveTabId )
 		end
 		local report = CoD.ZTweaksCompat
@@ -2966,3 +3086,8 @@ if Z.settingsHudProbeHookVersion ~= "settingsProbe1" then
 		return menu
 	end
 end
+
+-- Set this only after the complete settings runtime has installed.  The loose
+-- __init__ route uses it to skip its remaining modules when ZBundle already
+-- supplied the same owner through the fastfile (and vice versa).
+Z.RuntimeLoaded = true

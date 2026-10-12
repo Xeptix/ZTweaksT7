@@ -9,6 +9,7 @@
 local R = {}
 local Z = CoD.ZTweaksSettings
 local B = CoD.ZBundleSettings
+local L = CoD.ZTweaksLocalization
 local NewElementTimer = LUI ~= nil and LUI.UITimer ~= nil and LUI.UITimer.newElementTimer or nil
 pcall( require, "ui.uieditor.widgets.StartMenu.StartMenu_GameOptions_ZM" )
 
@@ -27,7 +28,12 @@ R.ExpandBundleList = function ()
 			local actionCount = 0
 			if type( B.GetActions ) == "function" then
 				local ok, actions = pcall( B.GetActions, controller )
-				if ok and type( actions ) == "table" then actionCount = #actions end
+				if ok and type( actions ) == "table" then
+					local isHost = B.HostStatus( controller ) == "HOST"
+					for _, entry in ipairs( actions ) do
+						if isHost or entry.authority == "player" then actionCount = actionCount + 1 end
+					end
+				end
 			end
 			local count = math.min( 11, math.max( 7, 5 + actionCount ) )
 			panel.buttonList:setTopBottom( true, false, 4.91, 4.91 + count * 33.6 )
@@ -50,13 +56,20 @@ R.IsEndGame = function ( value )
 end
 
 R.IsSettings = function ( value )
+	-- Recognize our entry by every catalog spelling, including a cached label
+	-- from a previous language. Do not add duplicate settings rows on refresh.
+	if L ~= nil then
+		for _, catalog in pairs( L.Catalogs ) do
+			if value ~= nil and ( value == catalog["ZTWEAKS SETTINGS"] or value == catalog["ZBUNDLE SETTINGS"] ) then return true end
+		end
+	end
 	return value == "ZTWEAKS SETTINGS" or value == "ZBUNDLE SETTINGS" or value == Engine.Localize( "ZTWEAKS SETTINGS" ) or value == Engine.Localize( "ZBUNDLE SETTINGS" )
 end
 
 R.PressAction = function ( id )
 	return function ( self, element, controller )
-		if B.HostStatus( controller ) ~= "HOST" then return end
 		local action = B.ActionById[id]
+		if action == nil or ( action.authority ~= "player" and B.HostStatus( controller ) ~= "HOST" ) then return end
 		if action == nil or type( action.action ) ~= "function" or not B.ActionEnabled( action, controller ) then return end
 		pcall( action.action, controller, action )
 	end
@@ -74,7 +87,7 @@ R.EndGame = function ( self, element, controller )
 	CoD.OverlayUtility.AddSystemOverlay( name, {
 		menuName = "SystemOverlay_Compact",
 		title = Engine.Localize( "MENU_END_GAME_CAPS" ),
-		description = "End the current game?",
+		description = L.Text( "End the current game?" ),
 		categoryType = CoD.OverlayUtility.OverlayTypes.Alert,
 		listDatasource = function ()
 			DataSources[name .. "_List"] = DataSourceHelpers.ListSetup( name .. "_List", function ()
@@ -180,11 +193,11 @@ R.Install = function ()
 				return
 			end
 			local isHost = B.HostStatus( controller ) == "HOST"
-			if isHost and Z.DrawsActionRows() then
+			if Z.DrawsActionRows() then
 				for _, entry in ipairs( B.GetActions( controller ) ) do
-					if not actionIds[entry.id] then
+					if ( isHost or entry.authority == "player" ) and not actionIds[entry.id] then
 						local action = Engine.CreateModel( root, "ztweaksAction_" .. entry.id )
-						Engine.SetModelValue( Engine.CreateModel( action, "displayText" ), B.ActionLabel( entry, controller ) )
+						Engine.SetModelValue( Engine.CreateModel( action, "displayText" ), Z.ActionWords( entry, controller ) )
 						Engine.SetModelValue( Engine.CreateModel( action, "action" ), R.PressAction( entry.id ) )
 						table.insert( items, sharedAt, {
 							model = action, properties = {}, ztweaksSharedRow = true, ztweaksActionId = entry.id

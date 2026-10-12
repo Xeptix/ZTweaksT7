@@ -1,0 +1,12 @@
+{
+  "format": 2,
+  "id": "ztweaks",
+  "source": "src/forks/t7/loose/ztweaks_boiii.gsc",
+  "sourceSha256": "a5d814b5eed9b9140740068bbdba0d7e09aeeb669acdc864b8b9eeec821c46fd",
+  "sourceNamespace": "ztweaks",
+  "functionCount": 265,
+  "generatedPrefix": "ztweaks__",
+  "generatedSourceSha256": "3929811ae1441939a2b92dff21a384063ba1eff247b309a72dfe156659af78c3",
+  "injectionTarget": "scripts/shared/duplicaterender_mgr.gsc",
+  "namespace": "zbundle"
+}

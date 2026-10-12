@@ -2,7 +2,7 @@
 
 **Optional gameplay settings for Black Ops III Zombies**
 
-ZTweaks v1.0, by Xep.
+ZTweaks, by Xep.
 
 [**Subscribe on the Steam Workshop**](https://steamcommunity.com/sharedfiles/filedetails/?id=3814908789)
 
@@ -22,8 +22,8 @@ want: DEFAULT leaves that part of the map in control.
 
 ## Requirements
 
-Black Ops III Zombies with Workshop mods. No other Z mod is required. ZTweaks is
-**mod-only**: it includes gameplay scripts and a Lua settings menu. In co-op, the host
+Black Ops III Zombies. The Workshop mod remains the recommended complete edition and
+includes gameplay scripts, compiled game assets and the Lua settings menu. In co-op, the host
 controls shared gameplay rules; each player needs a compatible settings UI to send
 their own character preference. A missing preference reply is treated as RANDOM.
 
@@ -33,16 +33,42 @@ their own character preference. A missing preference reply is treated as RANDOM.
 2. Select **ZTweaks** in Black Ops III's **Mods** menu.
 3. Open **ZTWEAKS SETTINGS** from the Zombies lobby or pause menu.
 
-ZTweaks is a mod, not a loose `custom_scripts` or `ui_scripts` installation. Players
-can also download **ZTweaks T7 v1.0 by Xep.zip** from
+Players can also download the latest versioned **ZTweaks T7** ZIP from
 [GitHub Releases](https://github.com/Xeptix/ZTweaksT7/releases/latest).
 Extract it and copy its `mods` folder into the Black Ops III game directory, giving
 `Call of Duty Black Ops III/mods/ztweaks/zone/`. Select **ZTweaks** under **Mods**.
-This ZIP contains the compiled mod and all twelve language fastfiles; it needs no
+This ZIP contains the compiled mod and all twelve language files; it needs no
 installer or Mod Tools. Close the game before replacing these files for an update.
 The adjacent `SHA256SUMS` verifies the ZIP; the one inside verifies its contents.
 The separate **Workshop** ZIP is source/linker input, not a player installation.
-There is no separate script edition to copy into a client.
+
+## Script editions
+
+Release downloads also carry script editions for BOIII (game-folder and AppData
+routes), T7x, and t7-compiler. The BOIII and T7x game-folder routes include generated
+`ui_scripts`, so their settings menus and translations travel with the gameplay
+script. Ezz BOIII prunes its whole per-user data folder at launch, including both
+`custom_scripts` and `ui_scripts`, so the AppData route is not persistent there; use
+the game-folder route for Ezz BOIII. Without the complete mod's menu artwork, the
+game-folder menus use a plain dark panel instead of the branded
+`zmods_menu_background_image`. They also omit the mod's HUD panels and the automatic-
+restart HUD indicator; the gameplay restart still runs through the script.
+
+The t7-compiler route has no settings menu and does not save menu choices; configure
+its gameplay dvars through the compiler project or console. Every Z Mod package
+contributes one owner-prefixed `scripts/zbundle/<mod>.gsc` fragment. Overlay whichever
+current Z Mod component folders you want into one t7-compiler project and compile it
+once: the generated entry concatenates them under one `zbundle` namespace and owns
+`scripts/shared/duplicaterender_mgr.gsc` exactly once. Never inject the component
+folders successively as separate projects.
+
+Run the packaged Windows or Linux installer with one of `boiii-game`,
+`boiii-appdata`, `t7x-game`, or `t7compiler` as its slot. For example:
+`install.ps1 -Slot boiii-game -Root "path\to\Call of Duty Black Ops III"` or
+`install.sh --slot t7x-game --root /path/to/bo3`. Use `-List/--list` to enumerate
+slots and `-Find/--find`, `-Verify/--verify`, `-Configure/--configure`, or
+ownership-safe `-Uninstall/--uninstall` to manage one route without deleting other
+mods' files.
 
 Black Ops III enables one selected mod at a time. For several Z mods together, select
 [ZBundle](https://steamcommunity.com/sharedfiles/filedetails/?id=3802815997) instead of
@@ -110,8 +136,9 @@ map's default. Starting Weapon Upgraded can Pack-a-Punch either selected slot or
 where a safe upgraded variant exists.
 
 Starting Ammo sets the initial fill, including EMPTY. Max Reserve Ammo scales native
-reserve grants while keeping the weapon's magazine and ammo type; asset limits may
-cap the result. Grenade/equipment type, starting count and carried capacity are separate
+reserve grants while keeping the weapon's magazine and ammo type. If the chosen weapon
+cannot support the requested amount, ZTweaks uses the highest amount that it safely can.
+Grenade/equipment type, starting count and carried capacity are separate
 settings. With both count and capacity set, the lower count wins. An unsupported item
 is not replaced with a different equipment type.
 
@@ -232,6 +259,19 @@ BO3-only; the BO2 bank-capacity rule is absent here. Map availability can differ
 
 ## Changelog
 
+### v1.1
+
+- Twelve-language menu and notice catalogs with English fallback and portable,
+  owner-aware localization for standalone and ZBundle rows.
+- BOIII, T7x, and t7-compiler script routes with ownership-safe Windows/Linux
+  installers and explicit UI/HUD limitations.
+- Collision-safe shared compiler fragments, mandatory fresh T7x compilation, and
+  reproducible package and installer lifecycle checks.
+- Point Gain no longer performs enabled-only work during map startup, and every
+  permanent gameplay poll uses a bounded yield to prevent T7x server starvation.
+- Compatibility-first map adapters retain stock ownership when a custom map does
+  not expose a supported system; the stock-map matrix covers every BO3 Zombies route.
+
 ### v1.0
 
 - Settings menu hardening: effective disabled/forced values, controller-aware
@@ -245,7 +285,18 @@ BO3-only; the BO2 bank-capacity rule is absent here. Map availability can differ
 
 ## Credits and support
 
+### Translations
+
+ZTweaks supports English, French, German, Italian, Spanish,
+Brazilian Portuguese, Russian, Polish, Japanese, Simplified and Traditional Chinese,
+Korean, and Czech. Translations were made by AI and may contain mistakes.
+Please [report incorrect or unclear translations](https://github.com/Xeptix/ZTweaksT7/issues)
+so I can get them fixed. Include the game, version, language, menu or setting,
+current wording and suggested correction; a screenshot is helpful.
+
 By Xep. Built around Treyarch's Zombies systems. The Lua menu is built with **L3akMod**
 by the **D3V Team**. MIT licensed; see [LICENSE](LICENSE).
 
-[![Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/F6L1285ROA)
+[![Support the mod on Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/xeptix)
+[![Support the mod on Patreon](https://img.shields.io/badge/Patreon-Xeptix-F96854?logo=patreon&logoColor=white)](https://www.patreon.com/Xeptix)
+[![Join the Discord](https://img.shields.io/badge/Discord-Join-5865F2?logo=discord&logoColor=white)](https://discord.gg/RE85HRwYZZ)

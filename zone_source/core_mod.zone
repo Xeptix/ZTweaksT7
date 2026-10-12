@@ -11,5 +11,20 @@ image,zmods_menu_background_image
 rawfile,ui/t7/utility/codutilityrequire.lua
 rawfile,ui/ztweaks/ztweakssettings.lua
 rawfile,ui/ztweaks/ztweakssettingsdata.lua
+rawfile,ui/ztweaks/ztweakslocalization.lua
+// ZT_LOCALIZATION_BEGIN
+rawfile,ui/ztweaks/localization/cs.lua
+rawfile,ui/ztweaks/localization/de.lua
+rawfile,ui/ztweaks/localization/es.lua
+rawfile,ui/ztweaks/localization/fr.lua
+rawfile,ui/ztweaks/localization/it.lua
+rawfile,ui/ztweaks/localization/ja.lua
+rawfile,ui/ztweaks/localization/ko.lua
+rawfile,ui/ztweaks/localization/pl.lua
+rawfile,ui/ztweaks/localization/pt_br.lua
+rawfile,ui/ztweaks/localization/ru.lua
+rawfile,ui/ztweaks/localization/zh_cn.lua
+rawfile,ui/ztweaks/localization/zh_tw.lua
+// ZT_LOCALIZATION_END
 rawfile,ui/ztweaks/ztweaksingamesettings.lua
 rawfile,ui/ztweaks/ztweaksrestartfallback.lua
