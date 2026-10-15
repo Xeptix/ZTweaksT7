@@ -259,6 +259,14 @@ BO3-only; the BO2 bank-capacity rule is absent here. Map availability can differ
 
 ## Changelog
 
+### v1.4
+
+- Wait for each joining player's own gameplay HUD acknowledgment before optional
+  remote spawn/loadout changes and Point Gain baseline work. A missing response
+  leaves those optional changes unapplied without holding up the map.
+- The client Compatibility page remains available in co-op, and the previous
+  report pacing remains in place.
+
 ### v1.3
 
 - Joining clients no longer receive an unsolicited continuous sweep of the
@@ -311,7 +319,8 @@ BO3-only; the BO2 bank-capacity rule is absent here. Map availability can differ
 
 ZTweaks supports English, French, German, Italian, Spanish,
 Brazilian Portuguese, Russian, Polish, Japanese, Simplified and Traditional Chinese,
-Korean, and Czech. Initial translations were made with ChatGPT and may contain mistakes.
+Korean, and Czech. Translations were made by AI and may contain mistakes.
+ChatGPT produced the initial translations.
 Please [report incorrect or unclear translations](https://github.com/Xeptix/ZTweaksT7/issues)
 so I can get them fixed. Include the game, version, language, menu or setting,
 current wording and suggested correction; a screenshot is helpful.
