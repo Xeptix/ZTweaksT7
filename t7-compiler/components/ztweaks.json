@@ -2,11 +2,11 @@
   "format": 2,
   "id": "ztweaks",
   "source": "src/forks/t7/loose/ztweaks_boiii.gsc",
-  "sourceSha256": "01db6382b77c2d2a93cfb413589df63c103a05c4280451ce630657f29452565f",
+  "sourceSha256": "0269f45c14a10b91cc390cd777bd956e7a6360d9b1800dfc7d60933870a26231",
   "sourceNamespace": "ztweaks",
-  "functionCount": 304,
+  "functionCount": 307,
   "generatedPrefix": "ztweaks__",
-  "generatedSourceSha256": "dc4cc99f685f0c40bc40057933a82f60d9782be7ff62348c8cca289d1c16e44c",
+  "generatedSourceSha256": "f1df1ce54e1b5180f8f8036f4cebd51cc00aac80e5167b87569d0416ce60c90f",
   "injectionTarget": "scripts/shared/duplicaterender_mgr.gsc",
   "namespace": "zbundle"
 }

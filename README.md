@@ -259,6 +259,14 @@ BO3-only; the BO2 bank-capacity rule is absent here. Map availability can differ
 
 ## Changelog
 
+### v1.3
+
+- Joining clients no longer receive an unsolicited continuous sweep of the
+  compatibility report during map loading. The report is requested only while
+  its menu page is open, sent in a paced snapshot, then updated on changes.
+- This limits reliable script-command traffic during co-op joins while retaining
+  the report and its fail-safe compatibility reasons.
+
 ### v1.2
 
 - New starting-weapon Pack-a-Punch and stock AAT controls, standard Box/Fire
