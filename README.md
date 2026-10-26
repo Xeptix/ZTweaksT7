@@ -37,7 +37,7 @@ Players can also download the latest versioned **ZTweaks T7** ZIP from
 [GitHub Releases](https://github.com/Xeptix/ZTweaksT7/releases/latest).
 Extract it and copy its `mods` folder into the Black Ops III game directory, giving
 `Call of Duty Black Ops III/mods/ztweaks/zone/`. Select **ZTweaks** under **Mods**.
-This ZIP contains the compiled mod and all twelve language files; it needs no
+This ZIP contains the compiled mod and all supported language files; it needs no
 installer or Mod Tools. Close the game before replacing these files for an update.
 The adjacent `SHA256SUMS` verifies the ZIP; the one inside verifies its contents.
 The separate **Workshop** ZIP is source/linker input, not a player installation.
@@ -245,7 +245,7 @@ a separate, explicit map integration.
 - [ZStats on GitHub](https://github.com/Xeptix/ZStatsT7) adds a stats HUD, personal bests, and match recaps.
 
 [ZBundle on the Workshop](https://steamcommunity.com/sharedfiles/filedetails/?id=3802815997)
-combines the Z mods in one selected mod. It has no separate GitHub repository.
+combines the Z mods in one selected mod.
 
 For an unexpected result, include the map, selected mod/version, setting and value,
 whether you were host, and the compatibility reason or game log. If the map fails with
@@ -258,6 +258,18 @@ settings use the same meanings where the engine supports them. GobbleGum scaling
 BO3-only; the BO2 bank-capacity rule is absent here. Map availability can differ.
 
 ## Changelog
+
+### v1.5
+
+- Add a Knife Lunge toggle while keeping the stock behavior by default.
+- Correct selected perk retention through ordinary down/revive cycles and clean up retained perks after terminal bleed-out.
+- Restore eligible ordinary weapons, ammunition and the selected gun after an ordinary bleed-out respawn, without duplicating quest weapons.
+- Implement Starting Room Only using the first sustainable survival area. Introductory travel is allowed; this challenge takes priority over Start Doors Open. Door exits are blocked before payment, and bypasses can return a living player to a previously checked safe position.
+- Implement Gun Game progression and One-Box Challenge while preserving map-owned weapons, purchase handling and the first box offer.
+- Apply No Pack-a-Punch through normal purchase checks, and make Full Map Pool select among map-approved, eligible weapons without authored weighting.
+- Correct Faster Barrier Rebuild discovery for animated stock barriers. Experimental Tweaks remains required.
+- Keep stock Alternate Ammo Type rerolls blocked while No Pack-a-Punch is active.
+- Apply Knife Lunge changes through the local menu/HUD path after client readiness, preserving the co-op loading safeguards.
 
 ### v1.4
 

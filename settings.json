@@ -363,6 +363,22 @@
           ]
         },
         {
+          "dvar": "zt_knife_lunge",
+          "label": "KNIFE LUNGE",
+          "type": "bool",
+          "kind": "flag",
+          "default": "1",
+          "storage_slot": 8,
+          "storage_factor": 12,
+          "storage_radix": 2,
+          "boundary": "NEXT MATCH",
+          "scope": "HOST / SHARED",
+          "games": ["t6", "t7"],
+          "description": "Turn off the stock automatic knife charge toward nearby targets. ON leaves the game's movement unchanged. This uses the engine's auto-melee setting and may not affect custom melee systems.",
+          "values": ["1", "0"],
+          "labels": ["ON", "OFF"]
+        },
+        {
           "dvar": "zt_random_starting_perks",
           "label": "RANDOM STARTING PERKS",
           "type": "int",
@@ -560,6 +576,7 @@
           "default": "0",
           "storage_slot": 46,
           "boundary": "NEXT DOWN",
+          "boundary_t6": "NEXT MATCH",
           "scope": "HOST / PER PLAYER",
           "games": ["t6", "t7"],
           "description": "Percentage of the map's normal revive interaction time. GAME DEFAULT preserves map, perk, and equipment modifiers.",
@@ -608,7 +625,7 @@
           "boundary": "NEXT DOWN",
           "scope": "HOST / PER PLAYER",
           "games": ["t6", "t7"],
-          "description": "Choose how many perks are removed through the standard down path. MAP DEFAULT keeps the map rule; NONE attempts to preserve every standard registered perk.",
+          "description": "Choose how many perks to lose on each ordinary down: ALL follows the map, NONE keeps eligible perks, and 1-4 randomly lose that many. Solo Quick Revive and map-owned perk protections still follow stock rules. Unsupported down routes leave perks unchanged by ZTweaks.",
           "values": ["default", "all", "none", "1", "2", "3", "4"],
           "labels": ["MAP DEFAULT", "ALL", "NONE", "1", "2", "3", "4"]
         },
@@ -1862,7 +1879,7 @@
           "boundary": "NEXT MATCH",
           "scope": "HOST / SHARED",
           "games": ["t6", "t7"],
-          "description": "Keep players in the map's starting zone only when the map safely identifies its exit doors. The challenge disables itself rather than guessing at scripted progression blockers.",
+          "description": "Stay in the first survival area after introductory travel. Known door exits are blocked; other escapes return living players to a checked safe position. Returns wait during downs, vehicles or special forms. Overrides Start Doors Open; unsupported areas remain map-controlled.",
           "values": ["0", "1"],
           "labels": ["OFF", "ON"]
         },

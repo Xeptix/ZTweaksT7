@@ -114,6 +114,14 @@ Dvar: `zt_player_speed`. Default: `0`. Applies: NEXT SPAWN.
 
 Choices: `0` = GAME DEFAULT, `50` = 50%, `75` = 75%, `100` = 100%, `125` = 125%, `150` = 150%, `200` = 200%, `300` = 300%.
 
+### KNIFE LUNGE
+
+Turn off the stock automatic knife charge toward nearby targets. ON leaves the game's movement unchanged. This uses the engine's auto-melee setting and may not affect custom melee systems.
+
+Dvar: `zt_knife_lunge`. Default: `1`. Applies: NEXT MATCH.
+
+Choices: `1` = ON, `0` = OFF.
+
 ### RANDOM STARTING PERKS
 
 Number of random perks granted independently to each player when they spawn. NONE is inert. Perks are chosen without duplicates from those registered by the current map; if fewer are available, every available perk is granted.
@@ -220,7 +228,7 @@ Choices: `0` = GAME DEFAULT, `1` = 1 SECOND, `2` = 2 SECONDS, `3` = 3 SECONDS, `
 
 ### LOSE PERKS ON DOWN
 
-Choose how many perks are removed through the standard down path. MAP DEFAULT keeps the map rule; NONE attempts to preserve every standard registered perk.
+Choose how many perks to lose on each ordinary down: ALL follows the map, NONE keeps eligible perks, and 1-4 randomly lose that many. Solo Quick Revive and map-owned perk protections still follow stock rules. Unsupported down routes leave perks unchanged by ZTweaks.
 
 Dvar: `zt_lose_perks_on_down`. Default: `default`. Applies: NEXT DOWN.
 
@@ -662,7 +670,7 @@ Choices: `0` = OFF, `1` = ON.
 
 ### STARTING ROOM ONLY
 
-Keep players in the map's starting zone only when the map safely identifies its exit doors. The challenge disables itself rather than guessing at scripted progression blockers.
+Stay in the first survival area after introductory travel. Known door exits are blocked; other escapes return living players to a checked safe position. Returns wait during downs, vehicles or special forms. Overrides Start Doors Open; unsupported areas remain map-controlled.
 
 Dvar: `zt_challenge_starting_room`. Default: `0`. Applies: NEXT MATCH.
 
